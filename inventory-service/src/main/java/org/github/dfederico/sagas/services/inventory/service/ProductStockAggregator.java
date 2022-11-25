@@ -55,7 +55,7 @@ public class ProductStockAggregator implements Aggregator<String, Order, Product
 
     static BiConsumer<Order, ProductStock> processProductStockReservation = (order, productStock) -> {
         log.info(">>> Process ProductStock Reservation [OrderId:{} ProductId:{} Amount:{}]", order.getId(), order.getProductId(), order.getUnits());
-        boolean reserved = productStock.reserveAmount(order.getUnits());
+        boolean reserved = productStock.reserveAmount(order.getUnits(), String.format("for Order %d - Customer %s", order.getId(), order.getCustomerId()));
         if (reserved) {
             order.approveOrder(SOURCE);
         } else {
@@ -66,13 +66,13 @@ public class ProductStockAggregator implements Aggregator<String, Order, Product
 
     static BiConsumer<Order, ProductStock> confirmProductStockReservation = (order, productStock) -> {
         log.info(">>> Confirm ProductStock Reservation [OrderId:{} ProductId:{} Amount:{}]", order.getId(), order.getProductId(), order.getUnits());
-        boolean confirmed = productStock.confirmReservedAmount(order.getUnits());
+        boolean confirmed = productStock.confirmReservedAmount(order.getUnits(), String.format("for Order %d - Customer %s", order.getId(), order.getCustomerId()));
         log.info(">>> Confirm ProductStock Reservation - Result:{} | Product:[Id:{}, Available:{}, Reserved:{}]", confirmed, productStock.getProductId(), productStock.getAvailableUnits(), productStock.getReservedUnits());
     };
 
     static BiConsumer<Order, ProductStock> compensateProductStockReservation = (order, productStock) -> {
         log.info(">>> Compensate ProductStock Reservation [OrderId:{} ProductId:{} Amount:{}]", order.getId(), order.getProductId(), order.getUnits());
-        boolean compensated = productStock.freeReservedAmount(order.getUnits());
+        boolean compensated = productStock.freeReservedAmount(order.getUnits(), String.format("for Order %d - Customer %s", order.getId(), order.getCustomerId()));
         log.info(">>> Compensate ProductStock Reservation - Result:{} | Product:[Id:{}, Available:{}, Reserved:{}]", compensated, productStock.getProductId(), productStock.getAvailableUnits(), productStock.getReservedUnits());
     };
 

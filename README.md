@@ -17,99 +17,126 @@ Order Service Orchestration check responses from the services and sends order **
 
 ### Considerations
 
-TODO: UPDATE THIS
-This example uses Kafka as a "database", using a topic to store the Inventory and 
+The services in this example also use Kafka as a "database", using a KTable, to store the state of the inventory, customer credit and order state. 
 
 
 ---
 
-TODO: UPDATE THIS!!!
 
 ## Code
 
-TODO: UPDATE THIS!!!
 The following parts of the code are worth checking out.
 
-### Services "State Machine"
+### Inventory and Payments Topology
+The topology is pretty similar in both cases, the orders are re-key by the productId or customerId and joined with the KTable that contains the stock or credit state, for each of the services.
 
-TODO: UPDATE THIS!!!
-Inventory and Payment Service consume *Orders* from a kafka topic and act according to the orders state. 
-- For NEW orders they will "reserve" the requested resource (funds, product, etc.) by moving the requested amount from available to reserved.
-- To COMPENSATE if a reservation is "failed" from any party, the resource amount is moved back from reservation to available. 
-- On CONFIRMED orders (when all parties have "approved" the resource reservation), the reserved amount is reduced.
+The Joiner aggregates the new state for the Customer or Product and submits the new state to the topic that backs the KTable, while producing the APPROVED/REJECTED Order response.
+
+**IMPORTANT**:This approach updates the KTable "asynchronously", thus the state is eventually consistent and breaks the "read-your-own-writes" principle for microservices
 
 ```java
-//See PaymentService or InventoryService
-public class Service {
-    //...
-    public void processOrder(Order order) {
-        //...
-        switch (order.getState()) {
-            case "NEW":
-                processReservation(order);
-                break;
-            case "CONFIRMED":
-                confirmReservation(order);
-                break;
-            case "COMPENSATE":
-                if (!record.value().getSource().equals(SOURCE))
-                    compensateReservation(order);
-                break;
-        }
-        //..
-    }
-//...
+public class InventoryStreamTopologies {
 
-    private void processReservation(Order order) {
-        //...
-        resource.setReserved(resource.getReserved() + order.requestedAmount);
-        resource.setAvailable(resource.getAvailable() - order.requestedAmount);
-        approveOrder(Order);
-        //...
-    }
+    public static StreamsBuilder buildTopology(StreamsBuilder builder, Properties properties) {
 
-    private void confirmReservation(Order order) {
         //...
-        resource.setReserved(resource.getReserved() - order.requestedAmount);
-        //...
-    }
+        KeyValueBytesStoreSupplier inventoryStore = Stores.persistentKeyValueStore(inventoryStoreName);
+        KTable<String, ProductStock> inventoryKTable = builder.table(
+                inventoryDataTopic,
+                Consumed.with(Serdes.String(), productStockSerde),
+                Materialized.<String, ProductStock>as(inventoryStore)
+                        .withKeySerde(Serdes.String())
+                        .withValueSerde(productStockSerde));
 
-    private void compensateReservation(Order order) {
         //...
-        resource.setReserved(resource.getReserved() - order.requestedAmount);
-        resource.setAvailable(resource.getAvailable() + order.requestedAmount);
+        OrderProductJoiner orderProductJoiner = new OrderProductJoiner(ordersResponseTopic, kafkaProperties);
+
+        //...
+        builder.stream(ordersRequestTopic, Consumed.with(Serdes.Integer(), orderSerde))
+                .selectKey((k, v) -> v.getProductId())
+                .peek((key, order) -> log.info(">>>>> Order Received for product[{}] - {}:{}", order.getProductId(), key, order))
+                .leftJoin(inventoryKTable, orderProductJoiner)
+                .peek((key, product) -> log.info(">>>>> JoinResult Id:{}, Available{}, Reserved:{}", product.getProductId(), product.getAvailableUnits(), product.getReservedUnits()))
+                .to(inventoryDataTopic, Produced.with(Serdes.String(), productStockSerde)); //TODO EVENTUAL CONSISTENCY??
         //...
     }
 }
 ```
 
+### Services "State Machine"
+
+Inventory and Payment Service consume *Orders* from a kafka topic and act according to the orders state. 
+- For NEW orders they will "reserve" the requested resource (funds, product, etc.) by moving the requested amount from available to reserved.
+- To COMPENSATE if a reservation is "failed" from any party, the resource amount is moved back from reservation to available. 
+- On CONFIRMED orders (when all parties have "approved" the resource reservation), the reserved amount is reduced.
+
+
+```java
+//See OrderCustomerJoiner and OrderProductJoiner
+public class OrderProductJoiner implements ValueJoiner<Order, ProductStock, ProductStock> {
+
+    //...
+    @Override
+    public ProductStock apply(Order order, ProductStock product) {
+        switch (order.getStatus()) {
+            case "NEW":
+                processProductStockReservation.accept(order, product);
+                sendOrderResponse(order, orderResponseProducer, rejectOrderTopic);
+                break;
+            case "CONFIRMED":
+                product.confirmReservedAmount(order.getUnits());
+                break;
+            case "COMPENSATE":
+                if (!order.getSource().equals(SOURCE)) product.freeReservedAmount(order.getUnits());
+                break;
+        }
+        return product;
+    }
+
+    static BiConsumer<Order, ProductStock> processProductStockReservation = (order, productStock) -> {
+        boolean reserved = productStock.reserveAmount(order.getUnits());
+        if (reserved) {
+            order.approveOrder(SOURCE);
+        } else {
+            order.rejectOrder(SOURCE, "Not enough product units available");
+        }
+    };
+    //...
+}
+```
+
 ### Orchestrator Stream
 
-TODO: UPDATE THIS!!!
 The stream joins the responses (same Order object model) from the services and send follow-through events if the order can be confirmed or services need to compensate/rollback
 
 ```java
 // See OrderStreamTopologies.java in order-service module
-//...
-    final Serde<Order> orderSerde = buildOrderSerde();
-    KStream<Integer, Order> paymentStream = streamBuilder.stream(paymentsResponseTopic, Consumed.with(Serdes.Integer(), orderSerde));
-    KStream<Integer, Order> inventoryStream = streamBuilder.stream(inventoryResponseTopic, Consumed.with(Serdes.Integer(), orderSerde));
+public class OrderStreamTopologies {
+    //...
+    private static Order ordersJoiner(Order left, Order right) {
 
-    paymentStream.join(inventoryStream,
-                OrderStreamTopologies::ordersJoiner,
-                JoinWindows.ofTimeDifferenceAndGrace(Duration.ofSeconds(10), Duration.ofSeconds(10)),
-                StreamJoined.with(Serdes.Integer(), orderSerde, orderSerde))
-        .peek((key, order) -> log.info(">>>>> JOIN RESULT {}:{}", key, order))
-        .to(ordersTopic, Produced.with(Serdes.Integer(), orderSerde));
-        //TODO NOT MATCHING AND (OUT-OF-ORDER)
-//...
+        //...
+        final Serde<Order> orderSerde = buildOrderSerde();
+        KStream<Integer, Order> paymentStream = streamBuilder.stream(paymentsResponseTopic, Consumed.with(Serdes.Integer(), orderSerde));
+        KStream<Integer, Order> inventoryStream = streamBuilder.stream(inventoryResponseTopic, Consumed.with(Serdes.Integer(), orderSerde));
+
+        paymentStream.join(inventoryStream,
+                        OrderStreamTopologies::ordersJoiner,
+                        JoinWindows.ofTimeDifferenceAndGrace(Duration.ofSeconds(10), Duration.ofSeconds(10)),
+                        StreamJoined.with(Serdes.Integer(), orderSerde, orderSerde))
+                .peek((key, order) -> log.info(">>>>> JOIN RESULT {}:{}", key, order))
+                .to(ordersTopic, Produced.with(Serdes.Integer(), orderSerde));
+        //...
+    }
+    //...
+}
+
 ```
 
-The above simply joins the responses of the service, the next snippet shows the logic behind sending a confirmation or a compensate event
+The above simply joins the responses of the service, the next snippet shows the logic behind sending a confirmation or a compensation event
 
 ### Stream joiner
 
-TODO: UPDATE THIS!!!
 ```java
 public class OrderStreamTopologies {
     //...
@@ -148,7 +175,7 @@ public class OrderStreamTopologies {
 ---
 
 ## Running the example
-TODO: UPDATE THIS!!!
+
 
 All the services and local Kafka cluster can be run with `docker compose` provided in the [sagas-env](/sagas-env) folder.
 ```shell
@@ -179,15 +206,15 @@ Events in the topics can be peeked with `kafka-console-consumer` or [kcat](https
 ```shell
 kcat -C -b localhost:9092 -t orders-request -o beginning
 
-kcat -C -b localhost:9092 -t orders-inventory -o beginning
+kcat -C -b localhost:9092 -t inventory-data -o beginning
 
-kcat -C -b localhost:9092 -t orders-payment-o beginning
+kcat -C -b localhost:9092 -t customer-data -o beginning
 ```
 
-or all at once wrapped in a consumer group
+or state topics at once wrapped in a consumer group
 
 ```shell
-kcat -C -b localhost:9092 -o beginning -G kcat-cg -t orders-request orders-payments orders-inventory
+kcat -C -b localhost:9092 -o beginning -G kcat-cg -t orders-request orders-payments-response orders-inventory-response
 ```
 
 ### Producing Orders
@@ -235,6 +262,6 @@ curl -X GET http://localhost:4547/api/products
 
 ## Known limitations
 Besides the considerations mentioned at the start of the page...
-- Not entirely "event-source", some events are not modelled, and we cannot replay easily all that happens on the payments and inventory services.
+- Not entirely "event-source", the state of customer and stock should be aggregated from "changes" not by producing a new state.
 - Adding another service to the saga need to re-think the compensation event when two out of three service fail. 
 - Handle late arriving messages.

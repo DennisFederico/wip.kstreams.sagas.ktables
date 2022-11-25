@@ -74,46 +74,46 @@ services:
 #      - ./monitoring/assets/grafana/provisioning/:/etc/grafana/provisioning
 
   ### APPS
-#  order-service:
-#    build:
-#      context: ../
-#      dockerfile: order-service/Dockerfile
-#      args:
-#        PROMETHEUS_AGENT_VERSION: 0.17.0
-#        MODULE: order-service
-#    ports:
-#      - "4545:4545"
-#    volumes:
-#      - ./jmx-exporter/:/usr/share/jmx-exporter
-#    depends_on:
-#      - broker
-#
-#  payment-service:
-#    build:
-#      context: ../
-#      dockerfile: payment-service/Dockerfile
-#      args:
-#        PROMETHEUS_AGENT_VERSION: 0.17.0
-#        MODULE: payment-service
-#    ports:
-#      - "4546:4546"
-#    volumes:
-#      - ./jmx-exporter/:/usr/share/jmx-exporter
-#    depends_on:
-#      - broker
-#      - order-service
-#
-#  inventory-service:
-#    build:
-#      context: ../
-#      dockerfile: inventory-service/Dockerfile
-#      args:
-#        PROMETHEUS_AGENT_VERSION: 0.17.0
-#        MODULE: inventory-service
-#    ports:
-#      - "4547:4547"
-#    volumes:
-#      - ./jmx-exporter/:/usr/share/jmx-exporter
-#    depends_on:
-#      - broker
-#      - order-service
+  order-service:
+    build:
+      context: ../
+      dockerfile: order-service/Dockerfile
+      args:
+        PROMETHEUS_AGENT_VERSION: 0.17.0
+        MODULE: order-service
+    ports:
+      - "4545:4545"
+    volumes:
+      - ./jmx-exporter/:/usr/share/jmx-exporter
+    depends_on:
+      - broker
+
+  payment-service:
+    build:
+      context: ../
+      dockerfile: payment-service/Dockerfile
+      args:
+        PROMETHEUS_AGENT_VERSION: 0.17.0
+        MODULE: payment-service
+    ports:
+      - "4546:4546"
+    volumes:
+      - ./jmx-exporter/:/usr/share/jmx-exporter
+    depends_on:
+      - broker
+      - order-service
+
+  inventory-service:
+    build:
+      context: ../
+      dockerfile: inventory-service/Dockerfile
+      args:
+        PROMETHEUS_AGENT_VERSION: 0.17.0
+        MODULE: inventory-service
+    ports:
+      - "4547:4547"
+    volumes:
+      - ./jmx-exporter/:/usr/share/jmx-exporter
+    depends_on:
+      - broker
+      - order-service

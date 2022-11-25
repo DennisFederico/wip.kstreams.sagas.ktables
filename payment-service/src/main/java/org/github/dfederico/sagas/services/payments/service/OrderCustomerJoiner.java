@@ -46,7 +46,7 @@ public class OrderCustomerJoiner implements ValueJoiner<Order, Customer, Custome
         int amount = order.getUnits() * order.getUnitPrice();
         log.info(">>> Process Customer Funds Reservation [OrderId:{} CustomerId:{} Amount:{}]", order.getId(), order.getCustomerId(), amount);
 
-        boolean reserved = customer.reservePayment(amount);
+        boolean reserved = customer.reservePayment(amount, String.format("for Order %d - Product %s", order.getId(), order.getProductId()));
         if (reserved) {
             order.approveOrder(SOURCE);
         } else {
@@ -58,14 +58,14 @@ public class OrderCustomerJoiner implements ValueJoiner<Order, Customer, Custome
     static BiConsumer<Order, Customer> confirmPayment = (order, customer) -> {
         int amount = order.getUnits() * order.getUnitPrice();
         log.info(">>> Confirm Customer Payment [OrderId:{} CustomerId:{} Amount:{}]", order.getId(), order.getCustomerId(), amount);
-        boolean confirmed = customer.confirmPayment(amount);
+        boolean confirmed = customer.confirmPayment(amount, String.format("for Order %d - Product %s", order.getId(), order.getProductId()));
         log.info(">>> Confirm Customer Payment - Result:{} | Customer:[Id:{}, Available:{}, Reserved:{}]", confirmed, customer.getCustomerId(), customer.getAvailableCredit(), customer.getReservedCredit());
     };
 
     static BiConsumer<Order, Customer> compensateFundsReservation = (order, customer) -> {
         int amount = order.getUnits() * order.getUnitPrice();
         log.info(">>> Compensate Customer Funds Reservation [OrderId:{} CustomerId:{} Amount:{}]", order.getId(), order.getCustomerId(), amount);
-        boolean compensated = customer.freeReservedPayment(amount);
+        boolean compensated = customer.freeReservedPayment(amount, String.format("for Order %d - Product %s", order.getId(), order.getProductId()));
         log.info(">>> Compensate Customer Funds Reservation - Result:{} | Customer:[Id:{}, Available:{}, Reserved:{}]", compensated, customer.getCustomerId(), customer.getAvailableCredit(), customer.getReservedCredit());
     };
 

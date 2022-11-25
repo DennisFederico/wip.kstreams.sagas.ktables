@@ -14,7 +14,7 @@
         <maven.compiler.target>11</maven.compiler.target>
         <maven.compiler.release>11</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <main.class>${project.groupId}.services.orders.Main</main.class>
+        <main.class>org.github.dfederico.sagas.services.orders.Main</main.class>
         <artifact.name>${project.artifactId}</artifact.name>
     </properties>
 

@@ -14,27 +14,30 @@ public class ProductStock {
     private int reservedUnits;
     private String reason;
 
-    public boolean reserveAmount(int amount) {
+    public boolean reserveAmount(int amount, String reason) {
         if (availableUnits >= amount) {
             availableUnits -= amount;
             reservedUnits += amount;
+            this.reason = reason;
             return true;
         }
         return false;
     }
 
-    public boolean freeReservedAmount(int amount) {
+    public boolean freeReservedAmount(int amount, String reason) {
         if (reservedUnits >= amount) {
             reservedUnits -= amount;
             availableUnits += amount;
+            this.reason = reason;
             return true;
         }
         return false;
     }
 
-    public boolean confirmReservedAmount(int amount) {
+    public boolean confirmReservedAmount(int amount, String reason) {
         if (reservedUnits >= amount) {
             reservedUnits -= amount;
+            this.reason = reason;
             return true;
         }
         return false;

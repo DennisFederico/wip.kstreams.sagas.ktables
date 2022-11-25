@@ -21,6 +21,7 @@ public class CustomerGenerator {
                         .name(FAKER.company().name())
                         .availableCredit(10_000 + RANDOM.nextInt(10000))
                         .reservedCredit(0)
+                        .reason("Initial Credit")
                         .build()).collect(Collectors.toMap(Customer::getCustomerId, Function.identity()));
     }
 }
