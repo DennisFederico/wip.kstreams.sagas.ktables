@@ -1,0 +1,119 @@
+version: '3.9'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.2.1
+    ports:
+      - "2181:2181"
+      - "9999:9999"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_JMX_PORT: 9999
+      KAFKA_JMX_HOSTNAME: zookeeper
+      EXTRA_ARGS: -javaagent:/usr/share/jmx-exporter/jmx_prometheus_javaagent-0.17.2.jar=1234:/usr/share/jmx-exporter/zookeeper.yml
+    volumes:
+      - ./jmx-exporter/:/usr/share/jmx-exporter
+
+  broker:
+    image: confluentinc/cp-server:7.2.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: broker
+      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: broker:29092
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+      CONFLUENT_METRICS_ENABLE: 'true'
+      CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+      EXTRA_ARGS: -javaagent:/usr/share/jmx-exporter/jmx_prometheus_javaagent-0.17.2.jar=1234:/usr/share/jmx-exporter/kafka_broker.yml
+    volumes:
+      - ./jmx-exporter/:/usr/share/jmx-exporter
+
+#  prometheus:
+#    image: prom/prometheus:v2.36.2
+#    command:
+#      - '--config.file=/etc/prometheus/prometheus.yml'
+#    ports:
+#      - 9090:9090
+#    volumes:
+#      - ./monitoring/assets/prometheus/prometheus-config/:/etc/prometheus
+#
+#  kafka-lag-exporter:
+#    image: lightbend/kafka-lag-exporter:0.6.7
+#    restart: always
+#    volumes:
+#      - ./kafka-lag-exporter:/opt/docker/conf
+#      - ./monitoring/assets/prometheus/security:/etc/kafka/secrets
+#
+#  grafana:
+#    image: grafana/grafana:9.0.2
+#    environment:
+#      - "GF_SECURITY_ADMIN_USER=admin"
+#      - "GF_SECURITY_ADMIN_PASSWORD=password"
+#      - "GF_USERS_ALLOW_SIGN_UP=false"
+#    ports:
+#      - "3000:3000"
+#    volumes:
+#      - ./monitoring/assets/grafana/provisioning/:/etc/grafana/provisioning
+
+  ### APPS
+#  order-service:
+#    build:
+#      context: ../
+#      dockerfile: order-service/Dockerfile
+#      args:
+#        PROMETHEUS_AGENT_VERSION: 0.17.0
+#        MODULE: order-service
+#    ports:
+#      - "4545:4545"
+#    volumes:
+#      - ./jmx-exporter/:/usr/share/jmx-exporter
+#    depends_on:
+#      - broker
+#
+#  payment-service:
+#    build:
+#      context: ../
+#      dockerfile: payment-service/Dockerfile
+#      args:
+#        PROMETHEUS_AGENT_VERSION: 0.17.0
+#        MODULE: payment-service
+#    ports:
+#      - "4546:4546"
+#    volumes:
+#      - ./jmx-exporter/:/usr/share/jmx-exporter
+#    depends_on:
+#      - broker
+#      - order-service
+#
+#  inventory-service:
+#    build:
+#      context: ../
+#      dockerfile: inventory-service/Dockerfile
+#      args:
+#        PROMETHEUS_AGENT_VERSION: 0.17.0
+#        MODULE: inventory-service
+#    ports:
+#      - "4547:4547"
+#    volumes:
+#      - ./jmx-exporter/:/usr/share/jmx-exporter
+#    depends_on:
+#      - broker
+#      - order-service
